@@ -197,6 +197,25 @@ const LIGHT = { empty: '#d9d9de', g0: '#0f5132', g1: '#2f7d55', g2: '#4f9a72', g
 let themeAt = 0
 let themeLight = false
 let osLight: boolean | null = null
+// verbose (the /config toggle, the setting, --verbose): Claude Code then marks every group and
+// message row isExpanded in the main view too, so under it isExpanded does not mean ctrl+o and
+// the rows still fold. Read from /config at most every 30s, as the theme is.
+let verboseOn = false
+let verboseAt = -Infinity
+async function viewExpanded($: EngineInterface, isExpanded: boolean): Promise<boolean> {
+  if (!isExpanded) return false
+  const now = await $.clock.now()
+  if (now - verboseAt > 30000) {
+    verboseAt = now
+    try {
+      const row = (await $.config.list()).find(r => r.key === 'verbose') as { value?: unknown } | undefined
+      verboseOn = row?.value === true
+    } catch {
+      // keep the last answer
+    }
+  }
+  return !verboseOn
+}
 // set once this session draws the desktop band: its clock then keeps the desktop's inks too
 let onDesktop = false
 async function palette($: EngineInterface, desktop = false) {
@@ -962,9 +981,10 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
-    seeView($, e.props.isExpanded)
+    const expanded = await viewExpanded($, e.props.isExpanded)
+    seeView($, expanded)
     const s = await settingsOf($)
-    if (s.raw || e.props.isExpanded) return next(e)
+    if (s.raw || expanded) return next(e)
     const x = els($, e)
     // A group of two or more helper launches is one live line with the total and the state
     // counts, then one line per helper kind below it.
@@ -1108,7 +1128,7 @@ export const register: Register = on => {
     // so it never sets the view flag: it would flip every later reply back to the default look.
     const s = await settingsOf($)
     await note($, `UserMessage ${e.surface} req=${e.requestId} kind=${e.props.origin.kind} expanded=${e.props.isExpanded} from=${e.props.from?.name ?? ''}`)
-    if (s.raw || e.props.isExpanded) return next(e)
+    if (s.raw || (await viewExpanded($, e.props.isExpanded))) return next(e)
     const x = els($, e)
     const kind = e.props.origin.kind
     const from = e.props.from?.name

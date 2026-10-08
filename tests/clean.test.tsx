@@ -353,3 +353,39 @@ test('desktop: the band is the usage pill (5-hour and weekly), then one pill per
   expect(await busy.find({ type: 'Text', text: 'Test' })).toBeDefined()
   expect(await busy.find({ type: 'Text', text: 'Run the unit tests' })).toBeDefined()
 })
+
+test('verbose on: the groups and messages it expands still fold; with verbose off an expanded group is ctrl+o and draws whole', { timeoutMs: 30000 }, async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-05T12:00:00Z') })
+  const w = world(on)
+  let verbose = true
+  on('config.list', () => ({ value: [{ key: 'verbose', label: 'Verbose output', kind: 'toggle', value: verbose, provider: { kind: 'builtin' } }] }) as never)
+  await start($)
+  await $.turn.start({ text: 'run the tests', turnId: 't1' })
+  const a = await call($, w, clock, { tool: 'Bash', command: 'echo one' })
+  const b = await call($, w, clock, { tool: 'Bash', command: 'echo two' })
+  await $.turn.complete({ answer: 'done', durationMs: 3000, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  const group = (ids: string[]) => ({
+    plugin: PLUGIN,
+    surface: 'terminal' as const,
+    component: 'ToolGroup' as const,
+    requestId: `group#${seq++}`,
+    props: { calls: ids.map(id => ({ tool_use_id: id, tool: 'Bash', input: {} })), isActive: false, isExpanded: true },
+    viewport: VIEW,
+  })
+  const you = { plugin: PLUGIN, surface: 'terminal' as const, component: 'UserMessage' as const, props: { text: 'run the tests', origin: { kind: 'composer' as const }, isExpanded: true }, viewport: VIEW }
+  // verbose: Claude Code marks every group and message expanded, and the person did not ask for ctrl+o
+  const g1 = await $.ui.mount(group([a]) as never)
+  shot('verbose-group-first', await g1.drawn())
+  expect(await g1.find({ type: 'Text', text: '2 steps this turn' })).toBeDefined()
+  const g2 = await $.ui.mount(group([b]) as never)
+  expect(await g2.drawn()).toMatchObject(HIDDEN)
+  const row = await $.ui.mount({ ...toolUse(b, 'Bash', { command: 'echo two' }), surface: 'terminal' })
+  expect(await row.drawn()).toMatchObject(HIDDEN)
+  const m = await $.ui.mount(you)
+  expect(await m.find({ type: 'Text', text: 'you' })).toBeDefined()
+  // verbose off (the /config toggle, read again after 30s): an expanded group is ctrl+o again
+  verbose = false
+  await clock.advance(31000)
+  const g3 = await $.ui.mount(group([a]) as never)
+  expect(await g3.drawn()).toMatchObject({ type: 'engine' })
+})
