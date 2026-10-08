@@ -389,3 +389,37 @@ test('verbose on: the groups and messages it expands still fold; with verbose of
   const g3 = await $.ui.mount(group([a]) as never)
   expect(await g3.drawn()).toMatchObject({ type: 'engine' })
 })
+
+test('clean: once the turn ends, Claude\'s text between steps folds into the steps line; the final answer stays; opening the turn or normal shows it', { timeoutMs: 30000 }, async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-05T12:00:00Z') })
+  const w = world(on)
+  await start($)
+  const said = (uuid: string, text: string) => $.session.append({ uuid, door: 'response', origin: { kind: 'model', model: 'm' }, message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] } } as never)
+  const reply = (uuid: string, text: string) =>
+    $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AssistantMessage', requestId: uuid, props: { text, isFirstOfReply: true }, viewport: VIEW } as never)
+  const STATUS = 'Status: the cause is the cache. Next, I clear it.'
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await said('u0', 'Looking at the logs first.')
+  await call($, w, clock, { tool: 'Bash', command: 'git status' })
+  await said('u1', STATUS)
+  await call($, w, clock, { tool: 'Bash', command: 'npm run clean' })
+  await said('u2', 'Fixed: the cache is clear.')
+  // while the turn runs, every status line stays
+  const m1 = await reply('u1', STATUS)
+  expect(await m1.find({ type: 'Markdown' })).toBeDefined()
+  await $.turn.complete({ answer: 'done', durationMs: 3000, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  expect(await (await reply('u0', 'Looking at the logs first.')).drawn()).toMatchObject(HIDDEN)
+  expect(await m1.drawn()).toMatchObject(HIDDEN)
+  const last = await reply('u2', 'Fixed: the cache is clear.')
+  shot('clean-turn-one-line', await last.drawn())
+  expect(await last.find({ type: 'Markdown' })).toBeDefined()
+  expect(await last.find({ type: 'Text', text: '2 steps this turn' })).toBeDefined()
+  // opening the turn line shows the folded text again
+  await last.press({ key: 'turn-t1' })
+  expect(await m1.find({ type: 'Markdown' })).toBeDefined()
+  await last.press({ key: 'turn-t1' })
+  expect(await m1.drawn()).toMatchObject(HIDDEN)
+  // normal keeps every reply
+  await $.command.run(command('normal') as never)
+  expect(await m1.find({ type: 'Markdown' })).toBeDefined()
+})

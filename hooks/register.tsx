@@ -114,6 +114,8 @@ const promptAt = new Map<string, number>()
 // reply was written after its steps draws the line under that reply (its last text message).
 const turnReply = new Map<string, string>()
 const replyTurn = new Map<string, string>()
+// every text Claude wrote in a turn, its uuid to the turn: the ones before the last fold away once the turn ends
+const textTurn = new Map<string, string>()
 // helper messages by stored message uuid, parsed from the raw text at append (the row's text has lost the envelope)
 const teamAt = new Map<string, F.Frame[]>()
 function hhmm(ms: number) {
@@ -853,6 +855,7 @@ export const register: Register = on => {
         const hasText = m.content.some(b => b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '')
         if (hasText) {
           const tid = await read($, turnNowRef)
+          if (tid && e.uuid) textTurn.set(String(e.uuid), tid)
           const turn = tid ? await get($, $.state.get({ ...turnRef, id: tid })) : undefined
           if (tid && turn?.first && e.uuid) {
             turnReply.set(tid, String(e.uuid))
@@ -1084,6 +1087,15 @@ export const register: Register = on => {
     if (hidden(s, 'said')) return nothing(els($, e).Box) as never
     const x = els($, e)
     const err = F.errorLine(e.props.text)
+    // Clean, once the turn ends: Claude's text before the turn's last reply folds into the steps line
+    // under that reply, so a spent turn reads as one line and the answer. The steps line opens it.
+    const own = err ? undefined : textTurn.get(String(e.requestId))
+    const last = own === undefined ? undefined : turnReply.get(own)
+    if (own !== undefined && last !== undefined && last !== String(e.requestId) && s.group && !s.keep && !expandedView) {
+      const t = await get($, $.state.get({ ...turnRef, id: own }))
+      const opened = (await get($, $.state.get({ ...openRef, id: `turn-${own}` }))) === true
+      if (t && !t.open && !opened) return nothing(x.Box) as never
+    }
     // The desktop app draws its own you / Claude distinction, so there a reply keeps its own look.
     if (!err && e.surface === 'desktop') return next(e)
     if (err)
