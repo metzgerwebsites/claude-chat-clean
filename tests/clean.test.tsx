@@ -423,3 +423,55 @@ test('clean: once the turn ends, Claude\'s text between steps folds into the ste
   await $.command.run(command('normal') as never)
   expect(await m1.find({ type: 'Markdown' })).toBeDefined()
 })
+
+test('one line: with grouping on, every row but the newest answer is one line with …; its chevron opens it in place, wrapped', { timeoutMs: 30000 }, async ($, on) => {
+  mock.clock(on, { now: Date.parse('2026-10-05T12:00:00Z') })
+  world(on)
+  await start($)
+  const clipped = async (m: { drawn: () => Promise<unknown> }) => JSON.stringify(await m.drawn()).includes('"wrap":"truncate-end"')
+  const said = (uuid: string, text: string) => $.session.append({ uuid, door: 'response', origin: { kind: 'model', model: 'm' }, message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] } } as never)
+  const reply = (uuid: string, text: string) =>
+    $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AssistantMessage', requestId: uuid, props: { text, isFirstOfReply: true }, viewport: VIEW } as never)
+  const OLD = 'Fixed: the token now refreshes.\n\nThe session lasts **30 days**.'
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await said('a1', OLD)
+  await $.turn.complete({ answer: 'done', durationMs: 3000, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  const old = await reply('a1', OLD)
+  // the newest answer shows whole
+  expect(await old.find({ type: 'Markdown' })).toBeDefined()
+  expect(await clipped(old)).toBe(false)
+  await $.turn.start({ text: 'run the tests', turnId: 't2' })
+  await said('a2', 'All 42 tests pass.\nThe auth test uses the new path.')
+  // a new turn: the older answer is one line, its markdown flattened
+  shot('one-line-old-answer', await old.drawn())
+  expect(await old.find({ type: 'Markdown' })).toBeUndefined()
+  expect(await old.find({ type: 'Text', text: 'Fixed: the token now refreshes. The session lasts 30 days.' })).toBeDefined()
+  expect(await clipped(old)).toBe(true)
+  const now = await reply('a2', 'All 42 tests pass.\nThe auth test uses the new path.')
+  expect(await now.find({ type: 'Markdown' })).toBeDefined()
+  // a click opens it in place, wrapped and whole; a second click cuts it again
+  await old.press({ key: 'msg-a1' })
+  expect(await old.find({ type: 'Markdown' })).toBeDefined()
+  expect(await clipped(old)).toBe(false)
+  await old.press({ key: 'msg-a1' })
+  expect(await clipped(old)).toBe(true)
+  // your message: one line, a click shows it whole
+  const you = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'UserMessage', requestId: 'p1', props: { text: 'fix the login bug\nand the logout bug', origin: { kind: 'composer' }, isExpanded: false }, viewport: VIEW } as never)
+  shot('one-line-you', await you.drawn())
+  expect(await you.find({ type: 'Text', text: 'fix the login bug and the logout bug' })).toBeDefined()
+  expect(await clipped(you)).toBe(true)
+  await you.press({ key: 'msg-p1' })
+  expect(await you.find({ type: 'Text', text: 'fix the login bug\nand the logout bug' })).toBeDefined()
+  expect(await clipped(you)).toBe(false)
+  // a slash command's answer: one line, a click shows it whole
+  const out = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'CommandOutput', requestId: 'c1', props: { text: 'chat-clean: Chat view: clean.\nSettings are open.' }, viewport: VIEW } as never)
+  expect(await out.find({ type: 'Text', text: 'Chat view: clean. Settings are open.' })).toBeDefined()
+  expect(await clipped(out)).toBe(true)
+  await out.press({ key: 'msg-c1' })
+  expect(await clipped(out)).toBe(false)
+  // grouping off: every row wraps whole again
+  await $.command.run(command('group off') as never)
+  expect(await old.find({ type: 'Markdown' })).toBeDefined()
+  expect(await clipped(old)).toBe(false)
+  expect(await clipped(you)).toBe(false)
+})

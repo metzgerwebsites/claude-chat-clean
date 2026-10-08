@@ -76,6 +76,7 @@ declare module 'claude-code' {
       helpers: number
       cursor: string | null
       turnNow: string | null
+      newest: string | null
       burstOpen: string | null
       helperIds: string[]
       callRun: StateFamily<string>

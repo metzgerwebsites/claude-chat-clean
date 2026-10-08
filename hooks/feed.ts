@@ -252,6 +252,19 @@ export function fit(text: string, room: number): string {
   return cut.replace(/[\s·,;:.-]+$/, '') + '…'
 }
 
+/** A whole message as one line, for a row cut with …: tags, markdown marks, list and heading heads and
+ *  line breaks go, the words stay. */
+export function flat(text: string): string {
+  return text
+    .replace(/<[^>]+>/g, ' ')
+    .split('\n')
+    .map(l => l.replace(/^\s*(?:#{1,6}|[-*+]|\d+[.)])\s+/, ''))
+    .join(' ')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** The first line of a message that is not empty, for a one-line message row. */
 export function headLine(text: string, room: number): string {
   return fit(noPaths(firstLine(readable(text.replace(/<[^>]+>/g, ' ')))), Math.max(8, room))

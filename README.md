@@ -99,6 +99,7 @@ Installed from the marketplace: run `claude plugin marketplace update claude-cha
 |---|---|
 | **Name column** | `you` beside your messages, `claude` beside the replies, the time of each message at the right edge |
 | **Folded turns** | Every tool call of a turn becomes one line, `○ 7 steps this turn ›`. When the turn ends, Claude's text between the steps folds into that line too, so the turn reads as one line and the answer. The arrow opens it in place |
+| **One line per row** | With grouping on (`/feed group on`, part of `clean`), each message longer than its row is one line cut with `…`: your messages, slash-command answers, and every Claude answer except the newest turn's. Click `›` at the end of the row to open it in place, wrapped and whole. Click `⌄` to cut it again. Works in the fullscreen layout, where Claude Code takes clicks |
 | **Working line** | While Claude works: a spinner, the step in plain words (`Reading app.py`), and the time |
 | **Helpers** | Helpers launched together show above the input: `3 helpers · 1 done · 2 running · 24s`, one line per kind below |
 | **Background runs** | After the turn: `Running in the background · Build the docs · 2m · you can keep typing` |

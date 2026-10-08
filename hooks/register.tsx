@@ -89,6 +89,8 @@ const TEST_WORDS = /\b(test|tests|suite|spec|specs|e2e|verify|check)\b/i
 const helpersRef = atom({ plugin: 'chat-clean', key: 'helpers' } as const, 0)
 const cursorRef = atom({ plugin: 'chat-clean', key: 'cursor' } as const, null as string | null)
 const turnNowRef = atom({ plugin: 'chat-clean', key: 'turnNow' } as const, null as string | null)
+// the main conversation's newest turn: its answer shows whole while grouping cuts every other row to one line
+const newestRef = atom({ plugin: 'chat-clean', key: 'newest' } as const, null as string | null)
 const burstOpenRef = atom({ plugin: 'chat-clean', key: 'burstOpen' } as const, null as string | null)
 const helperIdsRef = atom({ plugin: 'chat-clean', key: 'helperIds' } as const, [] as string[])
 const callRunRef = { plugin: 'chat-clean', key: 'callRun' } as const
@@ -146,6 +148,22 @@ function roomOf(e: Site, less: number) {
   return Math.max(16, (e.viewport?.columns ?? 100) - less)
 }
 const hidden = (s: Settings, k: Kind) => s.hide.includes(k)
+// Grouping on: a message row longer than its room is one line cut with …; its chevron opens it in
+// place, wrapped and whole, and shuts it again. ctrl+o and grouping off show every row whole.
+const msgKey = (id: string) => `msg-${id}`
+const needsCut = (text: string, room: number) => text.includes('\n') || [...F.flat(text)].length > room
+async function msgOpen($: EngineInterface, id: string): Promise<boolean> {
+  return (await get($, $.state.get({ ...openRef, id: msgKey(id) }))) === true
+}
+function msgChevron(e: Site, x: Els, $: EngineInterface, id: string, isOpen: boolean) {
+  const toggle = () => update($, { ...openRef, id: msgKey(id) } as never, (v: unknown) => !(v === true))
+  return (
+    <x.Box flexShrink={0} paddingLeft={1}>
+      {chevron(e, x, msgKey(id), isOpen, toggle)}
+    </x.Box>
+  )
+}
+const CUT = { wrap: 'truncate-end' } as const
 const isSearch = (tool: string) => tool === 'WebSearch' || tool === 'WebFetch'
 
 // Debug trail for measuring the real screen: CHAT_CLEAN_DEBUG=<file>. Off costs one env read.
@@ -765,6 +783,7 @@ export const register: Register = on => {
     await update($, liveRef, () => ({ turnId: e.turnId, startedAt: now, steps: 0, label: '', tool: '', callAt: now }))
     await update($, cursorRef, () => null)
     await update($, turnNowRef, () => e.turnId)
+    if ((e as { agentId?: string }).agentId === undefined) await update($, newestRef, () => e.turnId)
     await $.state.set({ ...turnRef, id: e.turnId }, { first: null, calls: 0, done: 0, open: true, interrupted: false })
     return next(e)
   })
@@ -1112,14 +1131,21 @@ export const register: Register = on => {
           </x.Box>
         </x.Box>
       ) as never
+    // grouping on: every answer but the newest turn's is one line cut with …, its chevron opens it
+    const msgId = String(e.requestId)
+    const newest = await read($, newestRef)
+    const ownTurn = textTurn.get(msgId)
+    const cut = s.group && !expandedView && (ownTurn === undefined || ownTurn !== newest) && needsCut(e.props.text, roomOf(e, NAME_W + 3))
+    const isOpen = cut ? await msgOpen($, msgId) : false
     const row = (
       <x.Box flexDirection="row" marginTop={e.props.isFirstOfReply ? 1 : 0}>
         <x.Box width={NAME_W} flexShrink={0}>
           <x.Text color={CLAUDE_INK} dimColor>{e.props.isFirstOfReply ? 'claude' : ''}</x.Text>
         </x.Box>
         <x.Box flexGrow={1} flexShrink={1}>
-          <x.Markdown text={e.props.text} />
+          {cut && !isOpen ? <x.Text {...CUT}>{F.flat(e.props.text)}</x.Text> : <x.Markdown text={e.props.text} />}
         </x.Box>
+        {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
       </x.Box>
     )
     const tid = replyTurn.get(String(e.requestId))
@@ -1220,22 +1246,30 @@ export const register: Register = on => {
     if (isPerson) {
       if (hidden(s, 'you')) return nothing(x.Box) as never
       if (e.surface === 'desktop') return next(e)
+      const msgId = String(e.requestId)
+      const cut = s.group && needsCut(e.props.text, roomOf(e, NAME_W + 10))
+      const isOpen = cut ? await msgOpen($, msgId) : false
+      const one = cut && !isOpen
+      const said = one ? F.flat(e.props.text) : e.props.text
       return (
         <x.Box flexDirection="row" marginTop={1}>
           <x.Box width={NAME_W} flexShrink={0}>
             <x.Text color={YOU_INK} dimColor>you</x.Text>
           </x.Box>
           <x.Box flexGrow={1} flexShrink={1}>
-            {/^\/[\w:-]+/.test(e.props.text) ? (
+            {/^\/[\w:-]+/.test(said) ? (
               // a slash command: its name in your ink, its arguments dim
-              <x.Text>
-                <x.Text color={YOU_INK}>{e.props.text.match(/^\/[\w:-]+/)![0]}</x.Text>
-                <x.Text dimColor>{e.props.text.replace(/^\/[\w:-]+/, '')}</x.Text>
+              <x.Text {...(one ? CUT : {})}>
+                <x.Text color={YOU_INK}>{said.match(/^\/[\w:-]+/)![0]}</x.Text>
+                <x.Text dimColor>{said.replace(/^\/[\w:-]+/, '')}</x.Text>
               </x.Text>
             ) : (
-              <x.Text color={YOU_INK}>{e.props.text}</x.Text>
+              <x.Text color={YOU_INK} {...(one ? CUT : {})}>
+                {said}
+              </x.Text>
             )}
           </x.Box>
+          {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
           {promptAt.has(String(e.requestId)) ? (
             <x.Box flexShrink={0} paddingLeft={2}>
               <x.Text dimColor>{F.clock(promptAt.get(String(e.requestId))!)}</x.Text>
@@ -1410,14 +1444,29 @@ export const register: Register = on => {
       const isError = (e.props as { isError?: boolean }).isError === true
       const text = e.props.text.replace(/^chat-clean:\s*/, '').trim()
       if (text === '') return nothing(x.Box) as never
+      const msgId = String(e.requestId)
+      const s2 = await settingsOf($)
+      const cut = s2.group && e.surface !== 'desktop' && needsCut(text, roomOf(e, PAD + 5))
+      const isOpen = cut ? await msgOpen($, msgId) : false
+      const one = cut && !isOpen
+      const said = one ? F.flat(text) : text
       return (
         <x.Box flexDirection="row" paddingLeft={PAD}>
           <x.Box width={2} flexShrink={0}>
             <x.Text dimColor>·</x.Text>
           </x.Box>
           <x.Box flexGrow={1} flexShrink={1}>
-            {isError ? <x.Text color="red">{text}</x.Text> : <x.Text dimColor>{text}</x.Text>}
+            {isError ? (
+              <x.Text color="red" {...(one ? CUT : {})}>
+                {said}
+              </x.Text>
+            ) : (
+              <x.Text dimColor {...(one ? CUT : {})}>
+                {said}
+              </x.Text>
+            )}
           </x.Box>
+          {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
         </x.Box>
       ) as never
     } catch {
