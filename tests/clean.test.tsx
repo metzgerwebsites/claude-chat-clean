@@ -451,16 +451,17 @@ test('one line: with grouping on, every row but the newest answer is one line wi
   expect(await json(old)).toContain('"label":"Fixed: the token now refreshes. The session lasts 30 days."')
   const now = await reply('a2', 'All 42 tests pass.\nThe auth test uses the new path.')
   expect(await now.find({ type: 'Markdown' })).toBeDefined()
-  // a click on the line opens it in place, wrapped and whole; the chevron shuts it again
+  // a click on the line opens it in place, whole, its lines kept and its marks gone; a click
+  // anywhere on the opened text shuts it again, and so does the chevron
   await old.press({ key: 'msg-a1' })
-  expect(await old.find({ type: 'Markdown' })).toBeDefined()
+  expect(await cut(old, 'a1')).toBe(false)
+  expect(await json(old)).toContain('"label":"Fixed: the token now refreshes.\\n\\nThe session lasts 30 days."')
+  await old.press({ key: 'msg-a1-open' })
+  expect(await cut(old, 'a1')).toBe(true)
+  await old.press({ key: 'msg-a1-more' })
   expect(await cut(old, 'a1')).toBe(false)
   await old.press({ key: 'msg-a1' })
   expect(await cut(old, 'a1')).toBe(true)
-  // the chevron at the end opens it too
-  await old.press({ key: 'msg-a1-more' })
-  expect(await old.find({ type: 'Markdown' })).toBeDefined()
-  await old.press({ key: 'msg-a1' })
   // a line wider than its room is cut to the room with …
   const LONG = 'word '.repeat(60).trim()
   const wide = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'UserMessage', requestId: 'p3', props: { text: LONG, origin: { kind: 'composer' }, isExpanded: false }, viewport: VIEW } as never)
@@ -473,14 +474,19 @@ test('one line: with grouping on, every row but the newest answer is one line wi
   expect(await json(you)).toContain('"label":"fix the login bug and the logout bug"')
   expect(await cut(you, 'p1')).toBe(true)
   await you.press({ key: 'msg-p1' })
-  expect(await you.find({ type: 'Text', text: 'fix the login bug\nand the logout bug' })).toBeDefined()
+  expect(await json(you)).toContain('"label":"fix the login bug\\nand the logout bug"')
   expect(await cut(you, 'p1')).toBe(false)
+  await you.press({ key: 'msg-p1-open' })
+  expect(await cut(you, 'p1')).toBe(true)
+  await you.press({ key: 'msg-p1' })
   // a slash command's answer: one line, a click shows it whole
   const out = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'CommandOutput', requestId: 'c1', props: { text: 'chat-clean: Chat view: clean.\nSettings are open.' }, viewport: VIEW } as never)
   expect(await json(out)).toContain('"label":"Chat view: clean. Settings are open."')
   expect(await cut(out, 'c1')).toBe(true)
   await out.press({ key: 'msg-c1' })
   expect(await cut(out, 'c1')).toBe(false)
+  await out.press({ key: 'msg-c1-open' })
+  expect(await cut(out, 'c1')).toBe(true)
   // no clicks on the main screen: the terminal truncates a Text instead
   const main = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'UserMessage', requestId: 'p2', props: { text: 'one\ntwo', origin: { kind: 'composer' }, isExpanded: false }, viewport: { ...VIEW, isFullscreen: false } } as never)
   expect(await json(main)).toContain('"wrap":"truncate-end"')

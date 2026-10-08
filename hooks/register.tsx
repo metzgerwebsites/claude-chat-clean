@@ -179,6 +179,13 @@ function cutLine(e: Site, x: Els, $: EngineInterface, id: string, text: string, 
     )
   return <x.Button key={msgKey(id)} plain {...(dim ? { dimColor: true } : {})} label={F.clip(text, room)} onPress={msgToggle($, id)} />
 }
+// The opened message: where the surface takes clicks, a plain Button whose label is the whole text
+// (it wraps), so a click anywhere on it shuts the message again; elsewhere the row's own drawing.
+function openLine(e: Site, x: Els, $: EngineInterface, id: string, text: string, fallback: unknown, dim = false) {
+  const clickable = e.surface !== 'terminal' || e.viewport?.isFullscreen === true
+  if (!clickable) return fallback
+  return <x.Button key={`${msgKey(id)}-open`} plain {...(dim ? { dimColor: true } : {})} label={F.plainText(text)} onPress={msgToggle($, id)} />
+}
 const isSearch = (tool: string) => tool === 'WebSearch' || tool === 'WebFetch'
 
 // Debug trail for measuring the real screen: CHAT_CLEAN_DEBUG=<file>. Off costs one env read.
@@ -1158,7 +1165,11 @@ export const register: Register = on => {
           <x.Text color={CLAUDE_INK} dimColor>{e.props.isFirstOfReply ? 'claude' : ''}</x.Text>
         </x.Box>
         <x.Box flexGrow={1} flexShrink={1}>
-          {cut && !isOpen ? cutLine(e, x, $, msgId, F.flat(e.props.text), roomOf(e, NAME_W + 5)) : <x.Markdown text={e.props.text} />}
+          {cut && !isOpen
+            ? cutLine(e, x, $, msgId, F.flat(e.props.text), roomOf(e, NAME_W + 5))
+            : cut
+              ? (openLine(e, x, $, msgId, e.props.text, <x.Markdown text={e.props.text} />) as never)
+              : <x.Markdown text={e.props.text} />}
         </x.Box>
         {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
       </x.Box>
@@ -1274,6 +1285,8 @@ export const register: Register = on => {
           <x.Box flexGrow={1} flexShrink={1}>
             {one ? (
               cutLine(e, x, $, msgId, said, roomOf(e, NAME_W + 12))
+            ) : cut && isOpen && (e.surface !== 'terminal' || e.viewport?.isFullscreen === true) ? (
+              (openLine(e, x, $, msgId, said, null) as never)
             ) : /^\/[\w:-]+/.test(said) ? (
               // a slash command: its name in your ink, its arguments dim
               <x.Text>
@@ -1473,6 +1486,8 @@ export const register: Register = on => {
           <x.Box flexGrow={1} flexShrink={1}>
             {one ? (
               cutLine(e, x, $, msgId, said, roomOf(e, PAD + 7), true)
+            ) : cut && isOpen && !isError && (e.surface !== 'terminal' || e.viewport?.isFullscreen === true) ? (
+              (openLine(e, x, $, msgId, said, null, true) as never)
             ) : isError ? (
               <x.Text color="red">{said}</x.Text>
             ) : (

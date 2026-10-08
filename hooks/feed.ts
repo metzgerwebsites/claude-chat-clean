@@ -252,6 +252,15 @@ export function fit(text: string, room: number): string {
   return cut.replace(/[\s·,;:.-]+$/, '') + '…'
 }
 
+/** A whole message for an opened row, its lines kept: markdown marks and heading heads go. */
+export function plainText(text: string): string {
+  return text
+    .split('\n')
+    .map(l => l.replace(/^(\s*)#{1,6}\s+/, '$1').replace(/\*\*|__|`/g, ''))
+    .join('\n')
+    .trim()
+}
+
 /** Text cut to its room by characters, with … at the end: a cut row fills its line to the edge. */
 export function clip(text: string, room: number): string {
   const chars = [...text]
