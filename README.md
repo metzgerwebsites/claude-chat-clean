@@ -78,6 +78,7 @@ Start Claude Code in that project with `claude`. The mod loads by itself. You kn
 | **One project** (recommended) | `git clone https://github.com/achammah/claude-chat-clean .claude/skills/chat-clean` | You want it every time you work in this project |
 | **Try it once** | `git clone https://github.com/achammah/claude-chat-clean ~/chat-clean`, then `claude --plugin-dir ~/chat-clean` | You want to see it before you keep it |
 | **Desktop app** | Install as for one project, then open the project in the app | You use the Claude Code desktop app. If it was already open, type `/reload-plugins` |
+| **Every project (marketplace)** | `/plugin marketplace add metzgerwebsites/claude-chat-clean`, then `/plugin install chat-clean@claude-chat-clean` | You want it in all projects. A session that was open before the install needs `/reload-plugins` |
 
 ### Update and remove
 
@@ -87,6 +88,8 @@ git pull
 ```
 
 Open sessions reload the mod as soon as its files change. To remove it, delete the folder `.claude/skills/chat-clean`.
+
+Installed from the marketplace: run `claude plugin marketplace update claude-chat-clean`, then `claude plugin update chat-clean@claude-chat-clean`. A session that is open keeps the old version until you type `/reload-plugins` or start it again. To remove it, run `claude plugin uninstall chat-clean@claude-chat-clean`.
 
 ---
 
@@ -158,6 +161,8 @@ Some rows belong to Claude Code itself, and no mod can reach them:
 - the "N background agents launched" block. chat-clean shows helpers above the input instead.
 
 Rows drawn while the mod reloads keep Claude Code's look, because they are already on screen.
+
+With verbose output on (`"verbose": true` or `--verbose`), Claude Code draws every row expanded, so chat-clean cannot tell your view from ctrl+o: steps still fold, and ctrl+o shows them folded too. Open a turn with its `›` line. In the fullscreen layout, ctrl+o draws each call as its own row with nothing that marks it as ctrl+o, so the steps stay folded there as well.
 
 ### In the desktop app
 
