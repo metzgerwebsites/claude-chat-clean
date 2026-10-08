@@ -252,6 +252,13 @@ export function fit(text: string, room: number): string {
   return cut.replace(/[\s·,;:.-]+$/, '') + '…'
 }
 
+/** Text cut to its room by characters, with … at the end: a cut row fills its line to the edge. */
+export function clip(text: string, room: number): string {
+  const chars = [...text]
+  if (chars.length <= room) return text
+  return chars.slice(0, Math.max(1, room - 1)).join('').trimEnd() + '…'
+}
+
 /** A whole message as one line, for a row cut with …: tags, markdown marks, list and heading heads and
  *  line breaks go, the words stay. */
 export function flat(text: string): string {

@@ -148,22 +148,37 @@ function roomOf(e: Site, less: number) {
   return Math.max(16, (e.viewport?.columns ?? 100) - less)
 }
 const hidden = (s: Settings, k: Kind) => s.hide.includes(k)
-// Grouping on: a message row longer than its room is one line cut with …; its chevron opens it in
-// place, wrapped and whole, and shuts it again. ctrl+o and grouping off show every row whole.
+// Grouping on: a message row longer than its room is one line cut with …; a click anywhere on the
+// line (or its chevron) opens it in place, wrapped and whole, and the chevron shuts it again.
+// ctrl+o and grouping off show every row whole.
 const msgKey = (id: string) => `msg-${id}`
 const needsCut = (text: string, room: number) => text.includes('\n') || [...F.flat(text)].length > room
 async function msgOpen($: EngineInterface, id: string): Promise<boolean> {
   return (await get($, $.state.get({ ...openRef, id: msgKey(id) }))) === true
 }
+const msgToggle = ($: EngineInterface, id: string) => () => update($, { ...openRef, id: msgKey(id) } as never, (v: unknown) => !(v === true))
 function msgChevron(e: Site, x: Els, $: EngineInterface, id: string, isOpen: boolean) {
-  const toggle = () => update($, { ...openRef, id: msgKey(id) } as never, (v: unknown) => !(v === true))
+  // shut, the line itself holds the message's key and the chevron its own
   return (
     <x.Box flexShrink={0} paddingLeft={1}>
-      {chevron(e, x, msgKey(id), isOpen, toggle)}
+      {chevron(e, x, isOpen ? msgKey(id) : `${msgKey(id)}-more`, isOpen, msgToggle($, id))}
     </x.Box>
   )
 }
 const CUT = { wrap: 'truncate-end' } as const
+// The cut line: where the surface takes clicks, a plain Button whose label is the text cut to its
+// room (a Button label never wraps or truncates by itself), so a click anywhere on it opens the
+// message; elsewhere a Text the terminal truncates.
+function cutLine(e: Site, x: Els, $: EngineInterface, id: string, text: string, room: number, dim = false) {
+  const clickable = e.surface !== 'terminal' || e.viewport?.isFullscreen === true
+  if (!clickable)
+    return (
+      <x.Text {...CUT} {...(dim ? { dimColor: true } : {})}>
+        {text}
+      </x.Text>
+    )
+  return <x.Button key={msgKey(id)} plain {...(dim ? { dimColor: true } : {})} label={F.clip(text, room)} onPress={msgToggle($, id)} />
+}
 const isSearch = (tool: string) => tool === 'WebSearch' || tool === 'WebFetch'
 
 // Debug trail for measuring the real screen: CHAT_CLEAN_DEBUG=<file>. Off costs one env read.
@@ -1143,7 +1158,7 @@ export const register: Register = on => {
           <x.Text color={CLAUDE_INK} dimColor>{e.props.isFirstOfReply ? 'claude' : ''}</x.Text>
         </x.Box>
         <x.Box flexGrow={1} flexShrink={1}>
-          {cut && !isOpen ? <x.Text {...CUT}>{F.flat(e.props.text)}</x.Text> : <x.Markdown text={e.props.text} />}
+          {cut && !isOpen ? cutLine(e, x, $, msgId, F.flat(e.props.text), roomOf(e, NAME_W + 5)) : <x.Markdown text={e.props.text} />}
         </x.Box>
         {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
       </x.Box>
@@ -1257,16 +1272,16 @@ export const register: Register = on => {
             <x.Text color={YOU_INK} dimColor>you</x.Text>
           </x.Box>
           <x.Box flexGrow={1} flexShrink={1}>
-            {/^\/[\w:-]+/.test(said) ? (
+            {one ? (
+              cutLine(e, x, $, msgId, said, roomOf(e, NAME_W + 12))
+            ) : /^\/[\w:-]+/.test(said) ? (
               // a slash command: its name in your ink, its arguments dim
-              <x.Text {...(one ? CUT : {})}>
+              <x.Text>
                 <x.Text color={YOU_INK}>{said.match(/^\/[\w:-]+/)![0]}</x.Text>
                 <x.Text dimColor>{said.replace(/^\/[\w:-]+/, '')}</x.Text>
               </x.Text>
             ) : (
-              <x.Text color={YOU_INK} {...(one ? CUT : {})}>
-                {said}
-              </x.Text>
+              <x.Text color={YOU_INK}>{said}</x.Text>
             )}
           </x.Box>
           {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
@@ -1456,14 +1471,12 @@ export const register: Register = on => {
             <x.Text dimColor>·</x.Text>
           </x.Box>
           <x.Box flexGrow={1} flexShrink={1}>
-            {isError ? (
-              <x.Text color="red" {...(one ? CUT : {})}>
-                {said}
-              </x.Text>
+            {one ? (
+              cutLine(e, x, $, msgId, said, roomOf(e, PAD + 7), true)
+            ) : isError ? (
+              <x.Text color="red">{said}</x.Text>
             ) : (
-              <x.Text dimColor {...(one ? CUT : {})}>
-                {said}
-              </x.Text>
+              <x.Text dimColor>{said}</x.Text>
             )}
           </x.Box>
           {cut ? msgChevron(e, x, $, msgId, isOpen) : null}
